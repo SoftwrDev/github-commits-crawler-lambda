@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  mangum-test
+
+  Sample SAM Template for mangum-test
+
+Resources:
+  DepLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+        LayerName: sam-app-dependencies
+        Description: Dependencies for sam app
+        ContentUri: dependencies
+        CompatibleRuntimes:
+          - python3.8   
+        LicenseInfo: 'MIT'
+        RetentionPolicy: Retain
+
+  MangumTestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: MangumRestApi
+
+  MangumTestResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt MangumTestApi.RootResourceId
+      RestApiId: !Ref MangumTestApi
+      PathPart: '{proxy+}'
+
+  MangumTestRootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: ANY
+      ResourceId: !GetAtt MangumTestApi.RootResourceId
+      RestApiId: !Ref MangumTestApi
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt ApiResourceFunction.Arn  
+        Credentials: 
+          Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/apig-invoke-lambda-role'
+
+  MangumTestProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: ANY
+      ResourceId: !Ref MangumTestResource
+      RestApiId: !Ref MangumTestApi
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt ApiResourceFunction.Arn
+        Credentials: 
+          Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/apig-invoke-lambda-role' 
+
+  ApiResourceFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: app
+      Handler: main.handler
+      Timeout: 3
+      Policies:
+        - AWSLambdaFullAccess
+      Layers:
+        - !Ref DepLayer
+      Runtime: python3.8
+
+  Deployment:
+    DependsOn:
+    - MangumTestRootMethod
+    - MangumTestProxyMethod
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      RestApiId: !Ref MangumTestApi
+      StageName: v1
