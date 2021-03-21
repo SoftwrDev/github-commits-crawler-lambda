@@ -1,4 +1,3 @@
-
 def sort_commits(commits, reverse=False):
         return sorted(commits, key=lambda c: c["date"], reverse=reverse)
 
